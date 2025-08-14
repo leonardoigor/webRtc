@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Screen Sharing - Página Inicial</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+        }
+        .options {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .option-card {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            padding: 30px;
+            width: 250px;
+            transition: all 0.3s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+        }
+        .option-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            border-color: #007bff;
+        }
+        .option-card.viewer {
+            border-color: #28a745;
+        }
+        .option-card.viewer:hover {
+            border-color: #28a745;
+            background: #f8fff9;
+        }
+        .option-card.sharer {
+            border-color: #007bff;
+        }
+        .option-card.sharer:hover {
+            border-color: #007bff;
+            background: #f8f9ff;
+        }
+        .option-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+        .option-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .option-description {
+            color: #666;
+            line-height: 1.5;
+        }
+        .features {
+            background: #e9ecef;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 40px;
+            text-align: left;
+        }
+        .features h3 {
+            color: #495057;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .features ul {
+            list-style: none;
+            padding: 0;
+        }
+        .features li {
+            padding: 5px 0;
+            color: #495057;
+        }
+        .features li:before {
+            content: "✅ ";
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖥️ WebRTC Screen Sharing</h1>
+        <p class="subtitle">Escolha como você deseja usar a plataforma</p>
+        
+        <div class="options">
+            <a href="viewer.html" class="option-card viewer">
+                <div class="option-icon">👀</div>
+                <div class="option-title">Visualizar</div>
+                <div class="option-description">
+                    Assista aos compartilhamentos de tela de outros usuários em tempo real e acesse gravações anteriores.
+                </div>
+            </a>
+            
+            <a href="sharer.html" class="option-card sharer">
+                <div class="option-icon">🖥️</div>
+                <div class="option-title">Compartilhar</div>
+                <div class="option-description">
+                    Compartilhe sua tela com outros usuários e tenha suas sessões gravadas automaticamente.
+                </div>
+            </a>
+        </div>
+        
+        <div class="features">
+            <h3>🚀 Recursos da Plataforma</h3>
+            <ul>
+                <li>Compartilhamento de tela em tempo real</li>
+                <li>Suporte a múltiplos usuários simultâneos</li>
+                <li>Gravação automática de sessões</li>
+                <li>Visualização de usuários online</li>
+                <li>Reprodução de gravações offline</li>
+                <li>Interface intuitiva e responsiva</li>
+                <li>Identificação por ID personalizado</li>
+                <li>Conexão WebRTC de alta qualidade</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
