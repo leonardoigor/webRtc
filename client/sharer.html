@@ -214,7 +214,7 @@
         // Configuração do SignalR
         const connection = new signalR.HubConnectionBuilder()
             .withUrl('http://localhost:5000/webrtchub')
-            .withAutomaticReconnect()
+            .withAutomaticReconnect([0, 2000, 10000, 30000]) // Intervalos específicos de reconexão
             .build();
 
         // Variáveis globais

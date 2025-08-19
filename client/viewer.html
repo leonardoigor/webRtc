@@ -184,7 +184,7 @@
         // Configuração do SignalR
         const connection = new signalR.HubConnectionBuilder()
             .withUrl('http://localhost:5000/webrtchub')
-            .withAutomaticReconnect()
+            .withAutomaticReconnect([0, 2000, 10000, 30000]) // Intervalos específicos de reconexão
             .build();
 
         // Variáveis globais
@@ -256,6 +256,53 @@
                 await peerConnection.addIceCandidate(candidate);
             }
         });
+
+        connection.on('ReceiveVideoFrame', (frameInfo) => {
+            console.log('📺 Recebendo frame de vídeo');
+            displayVideoFrame(frameInfo);
+        });
+
+        // Função para exibir frames de vídeo recebidos
+        function displayVideoFrame(frameInfo) {
+            try {
+                if (frameInfo && frameInfo.data) {
+                    const canvas = document.getElementById('videoCanvas') || createVideoCanvas();
+                    const ctx = canvas.getContext('2d');
+                    
+                    const img = new Image();
+                    img.onload = function() {
+                        canvas.width = frameInfo.width || img.width;
+                        canvas.height = frameInfo.height || img.height;
+                        ctx.drawImage(img, 0, 0);
+                    };
+                    img.src = 'data:image/jpeg;base64,' + frameInfo.data;
+                }
+            } catch (error) {
+                console.error('❌ Erro ao exibir frame de vídeo:', error);
+            }
+        }
+
+        // Criar canvas para exibir vídeo se não existir
+        function createVideoCanvas() {
+            const videoContainer = document.querySelector('.video-container');
+            const existingVideo = document.getElementById('remoteVideo');
+            
+            // Esconder o elemento video original
+            if (existingVideo) {
+                existingVideo.style.display = 'none';
+            }
+            
+            const canvas = document.createElement('canvas');
+            canvas.id = 'videoCanvas';
+            canvas.style.border = '2px solid #ddd';
+            canvas.style.borderRadius = '8px';
+            canvas.style.background = '#000';
+            canvas.style.maxWidth = '100%';
+            canvas.style.height = 'auto';
+            
+            videoContainer.appendChild(canvas);
+            return canvas;
+        }
 
         connection.onreconnecting(() => {
             updateStatus('disconnected', 'Reconectando...');
