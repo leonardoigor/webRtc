@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,17 +14,20 @@
             padding: 20px;
             background-color: #f5f5f5;
         }
+
         .container {
             background: white;
             padding: 30px;
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
+
         h1 {
             color: #333;
             text-align: center;
             margin-bottom: 30px;
         }
+
         .status {
             text-align: center;
             padding: 10px;
@@ -31,16 +35,19 @@
             border-radius: 5px;
             font-weight: bold;
         }
+
         .status.connected {
             background: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
         }
+
         .status.disconnected {
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+
         .online-users {
             background: #f8f9fa;
             padding: 20px;
@@ -48,16 +55,19 @@
             border: 1px solid #dee2e6;
             margin-bottom: 30px;
         }
+
         .online-users h3 {
             margin-top: 0;
             color: #495057;
         }
+
         .user-list {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 15px;
             margin-top: 15px;
         }
+
         .user-card {
             background: white;
             border: 2px solid #dee2e6;
@@ -65,28 +75,34 @@
             padding: 15px;
             transition: all 0.3s;
         }
+
         .user-card.sharing {
             border-color: #28a745;
             background: #f8fff9;
         }
+
         .user-card.online {
             border-color: #007bff;
             background: #f8f9ff;
         }
+
         .user-id {
             font-weight: bold;
             font-size: 16px;
             margin-bottom: 8px;
         }
+
         .user-status {
             font-size: 14px;
             margin-bottom: 8px;
         }
+
         .user-time {
             font-size: 12px;
             color: #6c757d;
             margin-bottom: 10px;
         }
+
         .watch-btn {
             background: #28a745;
             color: white;
@@ -97,17 +113,21 @@
             font-size: 14px;
             width: 100%;
         }
+
         .watch-btn:hover {
             background: #218838;
         }
+
         .watch-btn:disabled {
             background: #6c757d;
             cursor: not-allowed;
         }
+
         .video-container {
             text-align: center;
             margin-top: 30px;
         }
+
         video {
             border: 2px solid #ddd;
             border-radius: 8px;
@@ -115,6 +135,7 @@
             max-width: 100%;
             height: auto;
         }
+
         .recordings {
             background: #f8f9fa;
             padding: 20px;
@@ -122,10 +143,12 @@
             border: 1px solid #dee2e6;
             margin-top: 30px;
         }
+
         .recordings h3 {
             margin-top: 0;
             color: #495057;
         }
+
         .recording-item {
             display: inline-block;
             margin: 5px;
@@ -137,9 +160,11 @@
             cursor: pointer;
             font-size: 14px;
         }
+
         .recording-item:hover {
             background: #0056b3;
         }
+
         .refresh-btn {
             background: #17a2b8;
             color: white;
@@ -150,17 +175,19 @@
             font-size: 16px;
             margin-bottom: 20px;
         }
+
         .refresh-btn:hover {
             background: #138496;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>👀 WebRTC Viewer - Visualizar Compartilhamentos</h1>
-        
+
         <div id="status" class="status disconnected">Desconectado</div>
-        
+
         <div class="online-users">
             <h3>👥 Usuários Online</h3>
             <button class="refresh-btn" onclick="refreshOnlineUsers()">🔄 Atualizar Lista</button>
@@ -168,12 +195,12 @@
                 <p>Carregando usuários...</p>
             </div>
         </div>
-        
+
         <div class="video-container">
             <h3>📺 Visualização</h3>
-            <video id="remoteVideo" autoplay controls width="800" height="600"></video>
+            <video id="remoteVideo" autoplay muted playsinline controls width="800" height="600"></video>
         </div>
-        
+
         <div class="recordings">
             <h3>📁 Gravações Disponíveis</h3>
             <div id="recordings">Carregando...</div>
@@ -191,6 +218,8 @@
         let peerConnection;
         let isConnected = false;
         let currentWatchingUser = null;
+        let currentSenderId = null;
+        let pendingIceCandidates = [];
 
         // Elementos DOM
         const statusEl = document.getElementById('status');
@@ -212,10 +241,10 @@
                 await connection.start();
                 updateStatus('connected', 'Conectado ao servidor');
                 console.log('✅ Conectado ao SignalR Hub');
-                
+
                 // Registrar como viewer
                 await connection.invoke('RegisterUser', `viewer_${Date.now()}`);
-                
+
                 loadOnlineUsers();
                 loadRecordings();
             } catch (error) {
@@ -238,71 +267,34 @@
             displayOnlineUsers(users);
         });
 
-        connection.on('ReceiveOffer', async (offer) => {
-            console.log('📨 Recebendo offer para visualização');
-            await handleOffer(offer);
+        connection.on('ReceiveOffer', async (senderId, offer) => {
+            console.log('📨 Recebendo offer para visualização de:', senderId);
+            await handleOffer(senderId, offer);
         });
 
-        connection.on('ReceiveAnswer', async (answer) => {
-            console.log('📨 Recebendo answer');
+        connection.on('ReceiveAnswer', async (senderId, answer) => {
+            console.log('📨 Recebendo answer de:', senderId);
             if (peerConnection) {
                 await peerConnection.setRemoteDescription(answer);
             }
         });
 
-        connection.on('ReceiveIceCandidate', async (candidate) => {
-            console.log('📨 Recebendo ICE candidate');
-            if (peerConnection) {
-                await peerConnection.addIceCandidate(candidate);
-            }
-        });
-
-        connection.on('ReceiveVideoFrame', (frameInfo) => {
-            console.log('📺 Recebendo frame de vídeo');
-            displayVideoFrame(frameInfo);
-        });
-
-        // Função para exibir frames de vídeo recebidos
-        function displayVideoFrame(frameInfo) {
+        connection.on('ReceiveIceCandidate', async (senderId, candidate) => {
+            console.log('📨 Recebendo ICE candidate de:', senderId);
             try {
-                if (frameInfo && frameInfo.data) {
-                    const canvas = document.getElementById('videoCanvas') || createVideoCanvas();
-                    const ctx = canvas.getContext('2d');
-                    
-                    const img = new Image();
-                    img.onload = function() {
-                        canvas.width = frameInfo.width || img.width;
-                        canvas.height = frameInfo.height || img.height;
-                        ctx.drawImage(img, 0, 0);
-                    };
-                    img.src = 'data:image/jpeg;base64,' + frameInfo.data;
+                if (peerConnection && peerConnection.remoteDescription) {
+                    await peerConnection.addIceCandidate(candidate);
+                    console.log('✅ ICE candidate adicionado com sucesso');
+                } else {
+                    console.log('🔄 Armazenando ICE candidate no buffer (remote description ainda não definido)');
+                    pendingIceCandidates.push(candidate);
                 }
             } catch (error) {
-                console.error('❌ Erro ao exibir frame de vídeo:', error);
+                console.error('❌ Erro ao adicionar ICE candidate:', error);
             }
-        }
+        });
 
-        // Criar canvas para exibir vídeo se não existir
-        function createVideoCanvas() {
-            const videoContainer = document.querySelector('.video-container');
-            const existingVideo = document.getElementById('remoteVideo');
-            
-            // Esconder o elemento video original
-            if (existingVideo) {
-                existingVideo.style.display = 'none';
-            }
-            
-            const canvas = document.createElement('canvas');
-            canvas.id = 'videoCanvas';
-            canvas.style.border = '2px solid #ddd';
-            canvas.style.borderRadius = '8px';
-            canvas.style.background = '#000';
-            canvas.style.maxWidth = '100%';
-            canvas.style.height = 'auto';
-            
-            videoContainer.appendChild(canvas);
-            return canvas;
-        }
+        // Remover código do canvas - agora usando elemento video diretamente
 
         connection.onreconnecting(() => {
             updateStatus('disconnected', 'Reconectando...');
@@ -332,7 +324,7 @@
         // Exibir usuários online
         function displayOnlineUsers(users) {
             userListEl.innerHTML = '';
-            
+
             if (users.length === 0) {
                 userListEl.innerHTML = '<p>Nenhum usuário online</p>';
                 return;
@@ -341,9 +333,9 @@
             users.forEach(user => {
                 const userCard = document.createElement('div');
                 userCard.className = `user-card ${user.isSharing ? 'sharing' : 'online'}`;
-                
+
                 const startTime = new Date(user.startTime).toLocaleString();
-                
+
                 userCard.innerHTML = `
                     <div class="user-id">👤 ${user.userId}</div>
                     <div class="user-status">
@@ -356,7 +348,7 @@
                         ${user.isSharing ? '👀 Assistir' : 'Não disponível'}
                     </button>
                 `;
-                
+
                 userListEl.appendChild(userCard);
             });
         }
@@ -367,58 +359,384 @@
                 alert('❌ Não conectado ao servidor!');
                 return;
             }
-            
+
             try {
                 console.log(`👀 Solicitando stream do usuário: ${userId}`);
                 currentWatchingUser = userId;
-                
+
                 // Criar nova conexão WebRTC para receber o stream
                 peerConnection = new RTCPeerConnection(rtcConfig);
                 
-                peerConnection.ontrack = (event) => {
-                    console.log('📺 Recebendo stream do usuário:', userId);
-                    remoteVideo.srcObject = event.streams[0];
-                };
+                // Limpar ICE candidates pendentes ao criar nova conexão
+                pendingIceCandidates = [];
+
+                // Variável para acumular tracks de vídeo e áudio
+                let combinedStream = null;
                 
-                peerConnection.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        connection.invoke('SendIceCandidate', event.candidate);
+                peerConnection.ontrack = (event) => {
+                    console.log('📺 Recebendo track do usuário:', userId);
+                    console.log('🎬 Track kind:', event.track.kind);
+                    console.log('🎬 Track id:', event.track.id);
+                    
+                    // Criar ou reutilizar stream combinado
+                    if (!combinedStream) {
+                        combinedStream = new MediaStream();
+                        console.log('✅ Criando novo stream combinado');
+                    }
+                    
+                    // Adicionar track ao stream combinado
+                    combinedStream.addTrack(event.track);
+                    console.log('✅ Track adicionado ao stream combinado');
+                    
+                    console.log('📊 Stream combinado info:', {
+                        id: combinedStream.id,
+                        active: combinedStream.active,
+                        videoTracks: combinedStream.getVideoTracks().length,
+                        audioTracks: combinedStream.getAudioTracks().length
+                    });
+                    
+                    // Configurar srcObject apenas se ainda não foi configurado ou se mudou
+                    if (remoteVideo.srcObject !== combinedStream) {
+                        console.log('✅ Configurando srcObject do vídeo com stream combinado');
+                        remoteVideo.srcObject = combinedStream;
+                        
+                        console.log('📺 Video element info:', {
+                            videoWidth: remoteVideo.videoWidth,
+                            videoHeight: remoteVideo.videoHeight,
+                            readyState: remoteVideo.readyState,
+                            paused: remoteVideo.paused,
+                            muted: remoteVideo.muted
+                        });
+                        
+                        // Aguardar o stream estar pronto antes de reproduzir
+                        remoteVideo.addEventListener('loadedmetadata', () => {
+                            console.log('🎬 loadedmetadata event fired');
+                            console.log('📺 Video dimensions:', remoteVideo.videoWidth + 'x' + remoteVideo.videoHeight);
+                            
+                            const playPromise = remoteVideo.play();
+                            if (playPromise !== undefined) {
+                                playPromise.then(() => {
+                                    console.log('✅ Vídeo iniciado com sucesso');
+                                }).catch(error => {
+                                    console.error('❌ Erro ao iniciar vídeo:', error);
+                                });
+                            }
+                        }, { once: true });
+                        
+                        // Adicionar timeout para verificar se loadedmetadata não disparar
+                        setTimeout(() => {
+                            if (remoteVideo.readyState === 0) {
+                                console.warn('⚠️ loadedmetadata não disparou após 5 segundos');
+                                console.log('📺 Video state:', {
+                                    readyState: remoteVideo.readyState,
+                                    networkState: remoteVideo.networkState,
+                                    error: remoteVideo.error
+                                });
+                            }
+                        }, 5000);
                     }
                 };
-                
+
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        // Usar uma variável para armazenar o senderId correto
+                        const targetConnectionId = currentSenderId || userId;
+                        connection.invoke('SendIceCandidate', targetConnectionId, event.candidate);
+                    }
+                };
+
                 // Solicitar stream do usuário específico
                 await connection.invoke('RequestStream', userId);
-                
+
             } catch (error) {
                 console.error('❌ Erro ao assistir usuário:', error);
             }
         }
 
+        // Variável para controlar processamento duplicado
+        let isProcessingOffer = false;
+        
         // Lidar com offer recebido
-        async function handleOffer(offer) {
+        async function handleOffer(senderId, offer) {
+            // Evitar processamento duplicado
+            if (isProcessingOffer) {
+                console.log('⚠️ Já processando offer, ignorando chamada duplicada');
+                return;
+            }
+            
             try {
+                isProcessingOffer = true;
+                // Armazenar o senderId para usar nos ICE candidates
+                currentSenderId = senderId;
+                console.log('🔍 Tipo de offer recebido:', typeof offer, offer);
+                
+                // Verificar se o offer é uma string e tentar convertê-lo para objeto
+                if (typeof offer === 'string') {
+                    try {
+                        offer = JSON.parse(offer);
+                        console.log('🔄 Offer convertido de string para objeto:', offer);
+                    } catch (parseError) {
+                        console.error('❌ Erro ao converter offer de string para objeto:', parseError);
+                        // Se não for um JSON válido, tenta criar um objeto a partir da string
+                        if (offer.includes('sdp') && offer.includes('type')) {
+                            const sdpMatch = offer.match(/sdp: "([^"]+)"/s);
+                            const typeMatch = offer.match(/type: "([^"]+)"/s);
+                            
+                            if (sdpMatch && typeMatch) {
+                                offer = {
+                                    sdp: sdpMatch[1],
+                                    type: typeMatch[1]
+                                };
+                                console.log('🔄 Offer extraído da string:', offer);
+                            }
+                        }
+                    }
+                }
+                
+                if (!offer || !offer.sdp) {
+                    throw new Error('Offer inválido ou sem propriedade SDP');
+                }
+
                 if (!peerConnection) {
                     peerConnection = new RTCPeerConnection(rtcConfig);
                     
-                    peerConnection.ontrack = (event) => {
-                        console.log('📺 Recebendo stream');
-                        remoteVideo.srcObject = event.streams[0];
-                    };
+                    // Limpar ICE candidates pendentes ao criar nova conexão
+                    pendingIceCandidates = [];
+
+                    // Variável para acumular tracks de vídeo e áudio (handleOffer)
+                    let combinedStreamOffer = null;
                     
-                    peerConnection.onicecandidate = (event) => {
-                        if (event.candidate) {
-                            connection.invoke('SendIceCandidate', event.candidate);
+                    peerConnection.ontrack = (event) => {
+                        console.log('📺 Recebendo track do usuário (handleOffer):', senderId);
+                        console.log('🎬 Track kind:', event.track.kind);
+                        console.log('🎬 Track id:', event.track.id);
+                        
+                        // Criar ou reutilizar stream combinado
+                        if (!combinedStreamOffer) {
+                            combinedStreamOffer = new MediaStream();
+                            console.log('✅ Criando novo stream combinado (handleOffer)');
+                        }
+                        
+                        // Adicionar track ao stream combinado
+                        combinedStreamOffer.addTrack(event.track);
+                        console.log('✅ Track adicionado ao stream combinado (handleOffer)');
+                        
+                        console.log('📊 Stream combinado info (handleOffer):', {
+                            id: combinedStreamOffer.id,
+                            active: combinedStreamOffer.active,
+                            videoTracks: combinedStreamOffer.getVideoTracks().length,
+                            audioTracks: combinedStreamOffer.getAudioTracks().length
+                        });
+                        
+                        // Configurar srcObject apenas se ainda não foi configurado ou se mudou
+                        if (remoteVideo.srcObject !== combinedStreamOffer) {
+                            console.log('✅ Configurando srcObject do vídeo com stream combinado (handleOffer)');
+                            remoteVideo.srcObject = combinedStreamOffer;
+                            
+                            console.log('📺 Video element info:', {
+                                videoWidth: remoteVideo.videoWidth,
+                                videoHeight: remoteVideo.videoHeight,
+                                readyState: remoteVideo.readyState,
+                                paused: remoteVideo.paused,
+                                muted: remoteVideo.muted
+                            });
+                            
+                            // Aguardar o stream estar pronto antes de reproduzir
+                            remoteVideo.addEventListener('loadedmetadata', () => {
+                                console.log('🎬 loadedmetadata event fired (handleOffer)');
+                                console.log('📺 Video dimensions:', remoteVideo.videoWidth + 'x' + remoteVideo.videoHeight);
+                                
+                                const playPromise = remoteVideo.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.then(() => {
+                                        console.log('✅ Vídeo iniciado com sucesso (handleOffer)');
+                                    }).catch(error => {
+                                        console.error('❌ Erro ao iniciar vídeo (handleOffer):', error);
+                                    });
+                                }
+                            }, { once: true });
+                            
+                            // Adicionar timeout para verificar se loadedmetadata não disparar
+                            setTimeout(() => {
+                                if (remoteVideo.readyState === 0) {
+                                    console.warn('⚠️ loadedmetadata não disparou após 5 segundos (handleOffer)');
+                                    console.log('📺 Video state:', {
+                                        readyState: remoteVideo.readyState,
+                                        networkState: remoteVideo.networkState,
+                                        error: remoteVideo.error
+                                    });
+                                }
+                            }, 5000);
                         }
                     };
+
+                    peerConnection.onicecandidate = (event) => {
+                        if (event.candidate) {
+                            connection.invoke('SendIceCandidate', senderId, event.candidate);
+                        }
+                    };
+
+                    // Adicionar transceivers antes de qualquer negociação
+                    peerConnection.addTransceiver('video', { direction: 'recvonly' });
+                    peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+                }
+
+                // Verificar estado da conexão antes de prosseguir
+                console.log('🔍 Estado atual da conexão:', peerConnection.signalingState);
+                
+                // Se a conexão estiver em um estado problemático, feche e recrie
+                if (peerConnection.signalingState === 'have-local-offer' || 
+                    peerConnection.signalingState === 'have-remote-offer' ||
+                    peerConnection.signalingState === 'closed') {
+                    console.log('⚠️ Conexão em estado problemático (' + peerConnection.signalingState + '), recriando...');
+                    peerConnection.close();
+                    peerConnection = new RTCPeerConnection(rtcConfig);
+                    
+                    // Limpar ICE candidates pendentes ao recriar conexão
+                    pendingIceCandidates = [];
+
+                    // Variável para acumular tracks de vídeo e áudio (recriação)
+                    let combinedStreamRecreation = null;
+                    
+                    peerConnection.ontrack = (event) => {
+                        console.log('📺 Recebendo track na recriação:', senderId);
+                        console.log('🎬 Track kind:', event.track.kind);
+                        console.log('🎬 Track id:', event.track.id);
+                        
+                        // Criar ou reutilizar stream combinado
+                        if (!combinedStreamRecreation) {
+                            combinedStreamRecreation = new MediaStream();
+                            console.log('✅ Criando novo stream combinado (recriação)');
+                        }
+                        
+                        // Adicionar track ao stream combinado
+                        combinedStreamRecreation.addTrack(event.track);
+                        console.log('✅ Track adicionado ao stream combinado (recriação)');
+                        
+                        console.log('📊 Stream combinado info (recriação):', {
+                            id: combinedStreamRecreation.id,
+                            active: combinedStreamRecreation.active,
+                            videoTracks: combinedStreamRecreation.getVideoTracks().length,
+                            audioTracks: combinedStreamRecreation.getAudioTracks().length
+                        });
+                        
+                        // Configurar srcObject apenas se ainda não foi configurado ou se mudou
+                        if (remoteVideo.srcObject !== combinedStreamRecreation) {
+                            console.log('✅ Configurando srcObject do vídeo com stream combinado (recriação)');
+                            remoteVideo.srcObject = combinedStreamRecreation;
+                            
+                            console.log('📺 Video element info:', {
+                                videoWidth: remoteVideo.videoWidth,
+                                videoHeight: remoteVideo.videoHeight,
+                                readyState: remoteVideo.readyState,
+                                paused: remoteVideo.paused,
+                                muted: remoteVideo.muted
+                            });
+                            
+                            // Aguardar o stream estar pronto antes de reproduzir
+                            remoteVideo.addEventListener('loadedmetadata', () => {
+                                console.log('🎬 loadedmetadata event fired (recriação)');
+                                console.log('📺 Video dimensions:', remoteVideo.videoWidth + 'x' + remoteVideo.videoHeight);
+                                
+                                const playPromise = remoteVideo.play();
+                                if (playPromise !== undefined) {
+                                    playPromise.then(() => {
+                                        console.log('✅ Vídeo iniciado com sucesso na recriação');
+                                    }).catch(error => {
+                                        console.error('❌ Erro ao iniciar vídeo na recriação:', error);
+                                    });
+                                }
+                            }, { once: true });
+                            
+                            // Adicionar timeout para verificar se loadedmetadata não disparar
+                            setTimeout(() => {
+                                if (remoteVideo.readyState === 0) {
+                                    console.warn('⚠️ loadedmetadata não disparou após 5 segundos (recriação)');
+                                    console.log('📺 Video state:', {
+                                        readyState: remoteVideo.readyState,
+                                        networkState: remoteVideo.networkState,
+                                        error: remoteVideo.error
+                                    });
+                                }
+                            }, 5000);
+                        }
+                    };
+
+                    peerConnection.onicecandidate = (event) => {
+                        if (event.candidate) {
+                            connection.invoke('SendIceCandidate', senderId, event.candidate);
+                        }
+                    };
+
+                    // Adicionar transceivers na nova conexão
+                    peerConnection.addTransceiver('video', { direction: 'recvonly' });
+                    peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+                }
+
+                // Modificar o SDP para remover a linha problemática
+                let sdp = offer.sdp;
+                const invalidLine = 'a=fmtp:96 max-fr=30;max-fs=8160';
+                if (sdp.includes(invalidLine)) {
+                    console.log('🔧 Removendo linha SDP inválida:', invalidLine);
+                    sdp = sdp.replace(invalidLine, '');
+                }
+
+                // Criar nova descrição de sessão com o SDP modificado
+                const modifiedOffer = {
+                    type: offer.type,
+                    sdp: sdp
+                };
+                
+                console.log('🔍 Tentando setRemoteDescription com offer:', modifiedOffer);
+                await peerConnection.setRemoteDescription(modifiedOffer);
+                
+                // Processar ICE candidates pendentes após definir remote description
+                if (pendingIceCandidates.length > 0) {
+                    console.log('🔄 Processando', pendingIceCandidates.length, 'ICE candidates pendentes');
+                    for (const candidate of pendingIceCandidates) {
+                        try {
+                            await peerConnection.addIceCandidate(candidate);
+                            console.log('✅ ICE candidate pendente adicionado com sucesso');
+                        } catch (error) {
+                            console.error('❌ Erro ao adicionar ICE candidate pendente:', error);
+                        }
+                    }
+                    pendingIceCandidates = []; // Limpar buffer
                 }
                 
-                await peerConnection.setRemoteDescription(offer);
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                await connection.invoke('SendAnswer', answer);
+                // Verificar estado após setRemoteDescription
+                console.log('🔍 Estado após setRemoteDescription:', peerConnection.signalingState);
                 
+                // Aguardar um pouco para garantir que o estado foi atualizado
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                // Verificar estado novamente após delay
+                console.log('🔍 Estado após delay:', peerConnection.signalingState);
+                
+                // Só criar answer se estiver no estado correto
+                if (peerConnection.signalingState === 'have-remote-offer') {
+                    const answer = await peerConnection.createAnswer();
+                    console.log('🔍 Estado antes de setLocalDescription:', peerConnection.signalingState);
+                    await peerConnection.setLocalDescription(answer);
+                    console.log('🔍 Estado após setLocalDescription:', peerConnection.signalingState);
+                    
+                    try {
+                        // Enviar resposta com o connectionId do remetente
+                        await connection.invoke('SendAnswer', senderId, answer);
+                        console.log('✅ Resposta WebRTC enviada com sucesso');
+                    } catch (error) {
+                        console.error('❌ Erro ao enviar resposta WebRTC:', error);
+                    }
+                } else {
+                    console.error('❌ Estado inválido para criar answer:', peerConnection.signalingState);
+                    throw new Error(`Estado inválido da conexão: ${peerConnection.signalingState}`);
+                }
+
             } catch (error) {
                 console.error('❌ Erro ao processar offer:', error);
+            } finally {
+                // Resetar flag de processamento
+                isProcessingOffer = false;
             }
         }
 
@@ -432,26 +750,31 @@
         async function loadRecordings() {
             try {
                 const response = await fetch('http://localhost:5000/api/recordings');
-                const recordings = await response.json();
-                
+                const data = await response.json();
+
                 recordingsEl.innerHTML = '';
-                
-                if (recordings.length === 0) {
+
+                // Verificar se existe a propriedade recordings e se é um array
+                const recordings = data.recordings || [];
+
+                if (!Array.isArray(recordings) || recordings.length === 0) {
                     recordingsEl.innerHTML = '<p>Nenhuma gravação disponível</p>';
                     return;
                 }
-                
+
                 recordings.forEach(recording => {
                     const button = document.createElement('button');
-                    button.textContent = `▶️ ${recording}`;
+                    // Se recording é um objeto, usar fileName, senão usar como string
+                    const displayName = recording.fileName || recording.toString();
+                    button.textContent = `▶️ ${displayName}`;
                     button.className = 'recording-item';
-                    button.onclick = () => playRecording(recording);
+                    button.onclick = () => playRecording(recording.fileName || recording);
                     recordingsEl.appendChild(button);
                 });
-                
+
             } catch (error) {
                 console.error('❌ Erro ao carregar gravações:', error);
-                recordingsEl.innerHTML = '<p>Erro ao carregar gravações</p>';
+                recordingsEl.innerHTML = `<p>Erro ao carregar gravações: ${error.message}</p>`;
             }
         }
 
@@ -479,4 +802,5 @@
         });
     </script>
 </body>
+
 </html>

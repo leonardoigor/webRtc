@@ -5,20 +5,74 @@ using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
 using FFMpegCore;
 using FFMpegCore.Pipes;
+using WebRtcServer.Application.DTOs;
+using WebRtcServer.Application.Interfaces;
+using WebRtcServer.Application.Services;
+using WebRtcServer.Domain.Entities;
+using WebRtcServer.Domain.Enums;
+using WebRtcServer.Domain.Interfaces;
+using WebRtcServer.Domain.ValueObjects;
+using WebRtcServer.Infrastructure.Repositories;
+using WebRtcServer.Presentation.Hubs;
+using WebRtcServer.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Adicionar serviços
+builder.Services.AddControllers();
 builder.Services.AddSignalR(options =>
 {
-    // Configurações de timeout para evitar reconexão infinita
-    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
-    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
-    options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+    // Configurações de timeout ajustadas para evitar desconexões prematuras
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(120); // Aumentado para 2 minutos
+    options.KeepAliveInterval = TimeSpan.FromSeconds(30);       // Aumentado para 30 segundos
+    options.HandshakeTimeout = TimeSpan.FromSeconds(30);       // Aumentado para 30 segundos
     options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
     options.StreamBufferCapacity = 10;
+    
+    // Configurações adicionais para estabilidade
+    options.EnableDetailedErrors = true; // Para debugging
 });
-builder.Services.AddSingleton<WebRtcService>();
+
+// Configurar Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "WebRTC Server API",
+        Version = "v1",
+        Description = "API para gerenciamento de sessões WebRTC, usuários, streaming e gravações",
+        Contact = new Microsoft.OpenApi.Models.OpenApiContact
+        {
+            Name = "WebRTC Server",
+            Email = "support@webrtcserver.com"
+        }
+    });
+    
+    // Incluir comentários XML para documentação
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = System.IO.Path.Combine(System.AppContext.BaseDirectory, xmlFile);
+    if (System.IO.File.Exists(xmlPath))
+    {
+        c.IncludeXmlComments(xmlPath);
+    }
+});
+
+// Registrar repositórios
+builder.Services.AddSingleton<IUserRepository, UserRepository>();
+builder.Services.AddSingleton<ISessionRepository, SessionRepository>();
+builder.Services.AddSingleton<IRecordingRepository, RecordingRepository>();
+builder.Services.AddSingleton<IConnectionRepository, ConnectionRepository>();
+
+// Registrar serviços de aplicação
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IStreamingService, StreamingService>();
+builder.Services.AddScoped<IRecordingApplicationService, RecordingApplicationService>();
+
+// Registrar serviços de domínio (implementações temporárias)
+builder.Services.AddScoped<IWebRtcService, WebRtcService>();
+builder.Services.AddScoped<IRecordingService, RecordingService>();
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -33,8 +87,17 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Configurar pipeline
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "WebRTC Server API v1");
+    c.RoutePrefix = "swagger";
+    c.DocumentTitle = "WebRTC Server API Documentation";
+});
+
 app.UseCors();
 app.UseStaticFiles();
+app.MapControllers();
 app.MapHub<WebRtcHub>("/webrtchub");
 
 // Endpoint de status do servidor
@@ -44,37 +107,68 @@ app.MapGet("/", () => Results.Json(new {
     endpoints = new[] { "/webrtchub", "/api/recordings", "/recordings/{filename}", "/api/register-desktop" }
 }));
 
-// Endpoint para registro direto de clientes desktop
-app.MapPost("/api/register-desktop", async (DesktopRegistrationRequest request, WebRtcService webRtcService) =>
+// API para registro de clientes desktop
+app.MapPost("/api/desktop/register", async (DesktopRegistrationRequest request, IUserService userService) =>
 {
     try
     {
-        var connectionId = Guid.NewGuid().ToString();
-        await webRtcService.RegisterDesktopClient(connectionId, request.ClientId, request.GroupId);
+        Console.WriteLine($"=== API DESKTOP REGISTER ===");
+        Console.WriteLine($"Client ID: {request.ClientId}");
+        Console.WriteLine($"Group ID: {request.GroupId}");
         
-        return Results.Json(new DesktopRegistrationResponse
+        // Gerar um connection ID temporário para o cliente desktop
+        var connectionId = Guid.NewGuid().ToString();
+        // Usar apenas os primeiros 8 caracteres dos GUIDs para manter o userId dentro do limite de 50 caracteres
+        var clientIdShort = request.ClientId.Replace("-", "")[..8];
+        var groupIdShort = request.GroupId.Replace("-", "")[..8];
+        var userId = $"desktop_{clientIdShort}_{groupIdShort}";
+        
+        // Registrar o cliente desktop
+        var userDto = await userService.RegisterUserAsync(new CreateUserDto
+        {
+            UserId = userId,
+            ConnectionId = connectionId,
+            Type = UserType.DesktopClient,
+            GroupId = request.GroupId
+        });
+        
+        await userService.SetUserOnlineAsync(userDto.UserId, connectionId);
+        
+        var response = new DesktopRegistrationResponse
         {
             Success = true,
             ConnectionId = connectionId,
-            Message = "Desktop client registered successfully"
-        });
+            Message = "Cliente desktop registrado com sucesso"
+        };
+        
+        Console.WriteLine($"✅ Resposta: {System.Text.Json.JsonSerializer.Serialize(response)}");
+        return Results.Ok(response);
     }
     catch (Exception ex)
     {
-        return Results.Json(new DesktopRegistrationResponse
+        Console.WriteLine($"❌ Erro no registro: {ex.Message}");
+        return Results.BadRequest(new DesktopRegistrationResponse
         {
             Success = false,
-            Message = $"Registration failed: {ex.Message}"
+            ConnectionId = string.Empty,
+            Message = $"Erro ao registrar cliente: {ex.Message}"
         });
     }
- });
+});
 
 // Endpoint para receber ofertas WebRTC de clientes desktop
-app.MapPost("/api/desktop-offer", async (DesktopOfferRequest request, WebRtcService webRtcService) =>
+app.MapPost("/api/desktop/offer", async (DesktopOfferRequest request, IWebRtcService webRtcService, IUserService userService, IStreamingService streamingService) =>
 {
     try
     {
-        await webRtcService.HandleDesktopOffer(request.ConnectionId, request.Offer);
+        var user = await userService.GetUserByConnectionIdAsync(request.ConnectionId);
+        if (user != null)
+        {
+            var sessionDto = await streamingService.StartSessionAsync(user.Id);
+            await streamingService.StartSharingAsync(sessionDto.Id);
+            
+            await webRtcService.CreateOfferAsync(request.ConnectionId, request.Offer.ToString() ?? "");
+        }
         
         return Results.Json(new DesktopOfferResponse
         {
@@ -93,11 +187,13 @@ app.MapPost("/api/desktop-offer", async (DesktopOfferRequest request, WebRtcServ
 });
 
 // Endpoint para receber candidatos ICE de clientes desktop
-app.MapPost("/api/desktop-ice-candidate", async (DesktopIceCandidateRequest request, WebRtcService webRtcService) =>
+app.MapPost("/api/desktop/ice-candidate", async (DesktopIceCandidateRequest request, IWebRtcService webRtcService) =>
 {
     try
     {
-        await webRtcService.HandleDesktopIceCandidate(request.ConnectionId, request.Candidate);
+        // Converter o objeto candidato para JSON para preservar sua estrutura
+        string candidateJson = System.Text.Json.JsonSerializer.Serialize(request.Candidate);
+        await webRtcService.AddIceCandidateAsync(request.ConnectionId, candidateJson);
         
         return Results.Json(new DesktopIceCandidateResponse
         {
@@ -115,17 +211,18 @@ app.MapPost("/api/desktop-ice-candidate", async (DesktopIceCandidateRequest requ
     }
 });
  
- // API para listar gravações
-app.MapGet("/api/recordings", () =>
+// API para listar gravações
+app.MapGet("/api/recordings", async (IRecordingApplicationService recordingService) =>
 {
-    var recordingsPath = Path.Combine(Directory.GetCurrentDirectory(), "recordings");
-    if (!Directory.Exists(recordingsPath))
-        return Results.Json(new string[0]);
-    
-    var files = Directory.GetFiles(recordingsPath, "*.mp4")
-                        .Select(Path.GetFileName)
-                        .ToArray();
-    return Results.Json(files);
+    try
+    {
+        var recordings = await recordingService.GetAllRecordingsAsync();
+        return Results.Json(new { recordings });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { recordings = new List<object>(), error = ex.Message });
+    }
 });
 
 // Servir arquivos de gravação
@@ -140,355 +237,9 @@ app.MapGet("/recordings/{filename}", (string filename) =>
 
 app.Run();
 
-// Hub SignalR para comunicação WebRTC
-public class WebRtcHub : Hub
-{
-    private readonly WebRtcService _webRtcService;
-    
-    public WebRtcHub(WebRtcService webRtcService)
-    {
-        _webRtcService = webRtcService;
-    }
-    
-    public async Task RegisterUser(string userId)
-    {
-        await _webRtcService.RegisterUser(Context.ConnectionId, userId);
-        
-        // Notificar todos os clientes sobre a atualização da lista de usuários
-        var onlineUsers = await _webRtcService.GetOnlineUsers();
-        await Clients.All.SendAsync("OnlineUsersUpdated", onlineUsers);
-    }
-    
-    public async Task RegisterDesktopClient(string clientId, string groupId)
-    {
-        var connectionId = Context.ConnectionId;
-        Console.WriteLine($"=== REGISTRANDO CLIENTE DESKTOP ===");
-        Console.WriteLine($"Connection ID: {connectionId}");
-        Console.WriteLine($"Client ID: {clientId}");
-        Console.WriteLine($"Group ID: {groupId}");
-        
-        await _webRtcService.RegisterDesktopClient(connectionId, clientId, groupId);
-        
-        Console.WriteLine($"✅ Cliente desktop registrado com sucesso!");
-        
-        // Notificar sobre atualização da lista
-        var onlineUsers = await _webRtcService.GetOnlineUsers();
-        Console.WriteLine($"📋 Usuários online após registro: {onlineUsers.Count}");
-        await Clients.All.SendAsync("OnlineUsersUpdated", onlineUsers);
-    }
-    
-    public async Task<List<OnlineUser>> GetOnlineUsers()
-    {
-        return await _webRtcService.GetOnlineUsers();
-    }
-    
-    public async Task SendOffer(object offer)
-    {
-        Console.WriteLine($"=== RECEBENDO OFERTA ===");
-        Console.WriteLine($"Connection ID: {Context.ConnectionId}");
-        Console.WriteLine($"Oferta: {System.Text.Json.JsonSerializer.Serialize(offer)}");
-        
-        await _webRtcService.HandleOffer(Context.ConnectionId, offer);
-        
-        // Enviar oferta apenas para o viewer que solicitou (se houver um mapeamento)
-        var targetViewer = _webRtcService.GetPendingViewer(Context.ConnectionId);
-        if (!string.IsNullOrEmpty(targetViewer))
-        {
-            Console.WriteLine($"📤 Enviando oferta para viewer específico: {targetViewer}");
-            await Clients.Client(targetViewer).SendAsync("ReceiveOffer", offer);
-            _webRtcService.ClearPendingViewer(Context.ConnectionId);
-        }
-        else
-        {
-            Console.WriteLine($"📤 Fazendo broadcast da oferta para todos os clientes");
-            // Comportamento normal: broadcast para todos (quando não há viewer específico)
-            await Clients.Others.SendAsync("ReceiveOffer", offer);
-        }
-        
-        // Notificar sobre atualização da lista (usuário começou a compartilhar)
-        var onlineUsers = await _webRtcService.GetOnlineUsers();
-        Console.WriteLine($"📋 Atualizando lista de usuários online: {onlineUsers.Count} usuários");
-        foreach (var user in onlineUsers)
-        {
-            Console.WriteLine($"   - {user.UserId}: Compartilhando = {user.IsSharing}");
-        }
-        await Clients.All.SendAsync("OnlineUsersUpdated", onlineUsers);
-        Console.WriteLine($"✅ Oferta processada com sucesso!");
-    }
-    
-    public async Task SendAnswer(object answer)
-    {
-        await Clients.Others.SendAsync("ReceiveAnswer", answer);
-    }
-    
-    public async Task SendIceCandidate(object candidate)
-    {
-        await Clients.Others.SendAsync("ReceiveIceCandidate", candidate);
-    }
-    
-    public async Task SendVideoFrame(object frameInfo)
-    {
-        // Repassar frame de vídeo para todos os viewers conectados
-        var targetViewer = _webRtcService.GetPendingViewer(Context.ConnectionId);
-        if (!string.IsNullOrEmpty(targetViewer))
-        {
-            await Clients.Client(targetViewer).SendAsync("ReceiveVideoFrame", frameInfo);
-        }
-        else
-        {
-            await Clients.Others.SendAsync("ReceiveVideoFrame", frameInfo);
-        }
-    }
-    
-    public async Task RequestStream(string targetUserId)
-    {
-        // Encontrar a conexão do usuário alvo
-        var targetConnection = _webRtcService.GetUserConnection(targetUserId);
-        if (targetConnection != null)
-        {
-            // Mapear o sharer para este viewer
-            _webRtcService.SetPendingViewer(targetConnection, Context.ConnectionId);
-            
-            // Solicitar que o usuário alvo envie uma oferta para este viewer
-            await Clients.Client(targetConnection).SendAsync("StreamRequested", Context.ConnectionId);
-        }
-    }
-    
-    public async Task StopStream()
-    {
-        await _webRtcService.StopStream(Context.ConnectionId);
-        
-        // Notificar sobre atualização da lista (usuário parou de compartilhar)
-        var onlineUsers = await _webRtcService.GetOnlineUsers();
-        await Clients.All.SendAsync("OnlineUsersUpdated", onlineUsers);
-    }
-    
-    public override async Task OnDisconnectedAsync(Exception? exception)
-    {
-        await _webRtcService.RemoveClient(Context.ConnectionId);
-        
-        // Notificar sobre atualização da lista (usuário desconectou)
-        var onlineUsers = await _webRtcService.GetOnlineUsers();
-        await Clients.All.SendAsync("OnlineUsersUpdated", onlineUsers);
-        
-        await base.OnDisconnectedAsync(exception);
-    }
-}
 
-// Serviço WebRTC para gerenciar conexões e gravações
-public class WebRtcService
-{
-    private readonly ConcurrentDictionary<string, ClientConnection> _clients = new();
-    private readonly ConcurrentDictionary<string, UserSession> _userSessions = new();
-    private readonly string _recordingsPath;
-    
-    public WebRtcService()
-    {
-        _recordingsPath = Path.Combine(Directory.GetCurrentDirectory(), "recordings");
-        Directory.CreateDirectory(_recordingsPath);
-    }
-    
-    public async Task<List<OnlineUser>> GetOnlineUsers()
-    {
-        return _userSessions.Values
-            .Where(u => u.IsOnline && !u.UserId.StartsWith("viewer_"))
-            .Select(u => new OnlineUser 
-            { 
-                UserId = u.UserId, 
-                IsSharing = u.IsSharing,
-                StartTime = u.StartTime
-            })
-            .ToList();
-    }
-    
-    public string? GetUserConnection(string userId)
-    {
-        return _userSessions.Values
-            .FirstOrDefault(u => u.UserId == userId && u.IsOnline)?.ConnectionId;
-    }
-    
-    // Dicionário para mapear sharer -> viewer pendente
-    private readonly ConcurrentDictionary<string, string> _pendingViewers = new();
-    
-    public void SetPendingViewer(string sharerConnectionId, string viewerConnectionId)
-    {
-        _pendingViewers.TryAdd(sharerConnectionId, viewerConnectionId);
-    }
-    
-    public string? GetPendingViewer(string sharerConnectionId)
-    {
-        _pendingViewers.TryGetValue(sharerConnectionId, out var viewerConnectionId);
-        return viewerConnectionId;
-    }
-    
-    public void ClearPendingViewer(string sharerConnectionId)
-    {
-        _pendingViewers.TryRemove(sharerConnectionId, out _);
-    }
-    
-    public async Task RegisterUser(string connectionId, string userId)
-    {
-        var userSession = new UserSession
-        {
-            ConnectionId = connectionId,
-            UserId = userId,
-            IsOnline = true,
-            StartTime = DateTime.Now,
-            IsSharing = false
-        };
-        
-        _userSessions.AddOrUpdate(connectionId, userSession, (key, oldValue) => userSession);
-    }
-    
-    public async Task RegisterDesktopClient(string connectionId, string clientId, string groupId)
-    {
-        var userId = $"desktop_{clientId}_{groupId}";
-        var userSession = new UserSession
-        {
-            ConnectionId = connectionId,
-            UserId = userId,
-            IsOnline = true,
-            StartTime = DateTime.Now,
-            IsSharing = false
-        };
-        
-        _userSessions.AddOrUpdate(connectionId, userSession, (key, oldValue) => userSession);
-        Console.WriteLine($"Desktop client registered: {userId} with connection {connectionId}");
-    }
-    
-    public async Task HandleOffer(string connectionId, object offer)
-    {
-        var client = new ClientConnection
-        {
-            ConnectionId = connectionId,
-            StartTime = DateTime.Now,
-            IsRecording = true
-        };
-        
-        _clients.TryAdd(connectionId, client);
-        
-        // Marcar usuário como compartilhando
-        if (_userSessions.TryGetValue(connectionId, out var userSession))
-        {
-            userSession.IsSharing = true;
-            
-            // Iniciar gravação com ID do usuário
-            _ = Task.Run(() => StartRecording(client, userSession.UserId));
-        }
-    }
-    
-    public async Task HandleDesktopOffer(string connectionId, object offer)
-    {
-        // Processar oferta de cliente desktop
-        await HandleOffer(connectionId, offer);
-        Console.WriteLine($"Desktop offer processed for connection: {connectionId}");
-    }
-    
-    public async Task HandleDesktopIceCandidate(string connectionId, object candidate)
-    {
-        // Processar candidato ICE de cliente desktop
-        Console.WriteLine($"Desktop ICE candidate processed for connection: {connectionId}");
-        // Aqui você pode implementar a lógica específica para processar candidatos ICE
-    }
-    
-    public async Task StopStream(string connectionId)
-    {
-        if (_clients.TryRemove(connectionId, out var client))
-        {
-            client.IsRecording = false;
-            await StopRecording(client);
-        }
-        
-        // Marcar usuário como não compartilhando
-        if (_userSessions.TryGetValue(connectionId, out var userSession))
-        {
-            userSession.IsSharing = false;
-        }
-    }
-    
-    public async Task RemoveClient(string connectionId)
-    {
-        await StopStream(connectionId);
-        
-        // Remover usuário da sessão
-        if (_userSessions.TryRemove(connectionId, out var userSession))
-        {
-            userSession.IsOnline = false;
-        }
-    }
-    
-    private async Task StartRecording(ClientConnection client, string userId)
-    {
-        try
-        {
-            var filename = $"recording_{userId}_{DateTime.Now:yyyyMMdd_HHmmss}.mp4";
-            var outputPath = Path.Combine(_recordingsPath, filename);
-            client.RecordingPath = outputPath;
-            
-            // Simular gravação (em uma implementação real, você capturaria o stream WebRTC)
-            // Por enquanto, criamos um arquivo vazio que será preenchido quando o stream for recebido
-            await File.WriteAllTextAsync(outputPath + ".info", $"User: {userId}\nRecording started at {client.StartTime}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Erro ao iniciar gravação: {ex.Message}");
-        }
-    }
-    
-    private async Task StopRecording(ClientConnection client)
-    {
-        try
-        {
-            if (!string.IsNullOrEmpty(client.RecordingPath))
-            {
-                // Finalizar gravação
-                var infoFile = client.RecordingPath + ".info";
-                if (File.Exists(infoFile))
-                {
-                    var info = await File.ReadAllTextAsync(infoFile);
-                    info += $"\nRecording ended at {DateTime.Now}";
-                    await File.WriteAllTextAsync(infoFile, info);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Erro ao parar gravação: {ex.Message}");
-        }
-    }
-}
 
-// Classe para representar uma conexão de cliente
-public class ClientConnection
-{
-    public string ConnectionId { get; set; } = string.Empty;
-    public DateTime StartTime { get; set; }
-    public bool IsRecording { get; set; }
-    public string? RecordingPath { get; set; }
-}
 
-// Classe para representar uma sessão de usuário
-public class UserSession
-{
-    public string ConnectionId { get; set; } = string.Empty;
-    public string UserId { get; set; } = string.Empty;
-    public bool IsOnline { get; set; }
-    public bool IsSharing { get; set; }
-    public DateTime StartTime { get; set; }
-}
-
-// Classe para representar um usuário online
-public class OnlineUser
-{
-    [JsonPropertyName("userId")]
-    public string UserId { get; set; } = string.Empty;
-    
-    [JsonPropertyName("isSharing")]
-    public bool IsSharing { get; set; }
-    
-    [JsonPropertyName("startTime")]
-    public DateTime StartTime { get; set; }
-}
 
 // Classes para registro de clientes desktop
 public class DesktopRegistrationRequest

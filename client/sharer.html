@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,17 +14,20 @@
             padding: 20px;
             background-color: #f5f5f5;
         }
+
         .container {
             background: white;
             padding: 30px;
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
+
         h1 {
             color: #333;
             text-align: center;
             margin-bottom: 30px;
         }
+
         .user-setup {
             background: #e9ecef;
             padding: 20px;
@@ -31,6 +35,7 @@
             margin-bottom: 30px;
             text-align: center;
         }
+
         .user-setup input {
             padding: 10px;
             font-size: 16px;
@@ -39,6 +44,7 @@
             margin: 0 10px;
             width: 200px;
         }
+
         .user-setup button {
             background: #007bff;
             color: white;
@@ -48,13 +54,16 @@
             cursor: pointer;
             font-size: 16px;
         }
+
         .user-setup button:hover {
             background: #0056b3;
         }
+
         .user-setup button:disabled {
             background: #6c757d;
             cursor: not-allowed;
         }
+
         .status {
             text-align: center;
             padding: 10px;
@@ -62,38 +71,46 @@
             border-radius: 5px;
             font-weight: bold;
         }
+
         .status.connected {
             background: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
         }
+
         .status.disconnected {
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+
         .status.streaming {
             background: #d1ecf1;
             color: #0c5460;
             border: 1px solid #bee5eb;
         }
+
         .video-container {
             text-align: center;
             margin-bottom: 30px;
         }
+
         .video-wrapper {
             display: inline-block;
             margin: 10px;
         }
+
         video {
             border: 2px solid #ddd;
             border-radius: 8px;
             background: #000;
         }
+
         .controls {
             text-align: center;
             margin-bottom: 30px;
         }
+
         button {
             background: #007bff;
             color: white;
@@ -105,25 +122,32 @@
             font-size: 16px;
             transition: background 0.3s;
         }
+
         button:hover {
             background: #0056b3;
         }
+
         button:disabled {
             background: #6c757d;
             cursor: not-allowed;
         }
+
         .start-btn {
             background: #28a745;
         }
+
         .start-btn:hover {
             background: #218838;
         }
+
         .stop-btn {
             background: #dc3545;
         }
+
         .stop-btn:hover {
             background: #c82333;
         }
+
         .user-info {
             background: #f8f9fa;
             padding: 15px;
@@ -132,25 +156,30 @@
             margin-bottom: 20px;
             text-align: center;
         }
+
         .user-info h3 {
             margin: 0 0 10px 0;
             color: #495057;
         }
+
         .user-id {
             font-size: 18px;
             font-weight: bold;
             color: #007bff;
         }
+
         .recordings {
             background: #f8f9fa;
             padding: 20px;
             border-radius: 8px;
             border: 1px solid #dee2e6;
         }
+
         .recordings h3 {
             margin-top: 0;
             color: #495057;
         }
+
         .recording-item {
             display: inline-block;
             margin: 5px;
@@ -162,47 +191,50 @@
             cursor: pointer;
             font-size: 14px;
         }
+
         .recording-item:hover {
             background: #0056b3;
         }
+
         .hidden {
             display: none;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>🖥️ WebRTC Sharer - Compartilhar Tela</h1>
-        
+
         <div id="userSetup" class="user-setup">
             <h3>👤 Identificação do Usuário</h3>
             <p>Digite seu ID para começar a compartilhar:</p>
             <input type="text" id="userIdInput" placeholder="Digite seu ID (ex: usuario123)" maxlength="50">
             <button onclick="registerUser()">🚀 Entrar</button>
         </div>
-        
+
         <div id="mainInterface" class="hidden">
             <div class="user-info">
                 <h3>👤 Usuário Conectado</h3>
                 <div class="user-id" id="currentUserId"></div>
             </div>
-            
+
             <div id="status" class="status disconnected">Desconectado</div>
-            
+
             <div class="video-container">
                 <div class="video-wrapper">
                     <h3>🖥️ Sua Tela</h3>
                     <video id="localVideo" autoplay muted width="640" height="480"></video>
                 </div>
             </div>
-            
+
             <div class="controls">
                 <button id="startBtn" class="start-btn" onclick="startStream()" disabled>🖥️ Compartilhar Tela</button>
                 <button id="stopBtn" class="stop-btn" onclick="stopStream()" disabled>⏹️ Parar Compartilhamento</button>
                 <button onclick="refreshRecordings()">🔄 Atualizar Gravações</button>
                 <button onclick="logout()">🚪 Sair</button>
             </div>
-            
+
             <div class="recordings">
                 <h3>📁 Suas Gravações</h3>
                 <div id="recordings">Carregando...</div>
@@ -223,6 +255,8 @@
         let isStreaming = false;
         let isConnected = false;
         let currentUserId = null;
+        let currentViewerConnectionId = null; // Armazenar o connectionId do viewer atual
+        let heartbeatInterval = null; // Intervalo para heartbeat
 
         // Elementos DOM
         const userSetupEl = document.getElementById('userSetup');
@@ -246,24 +280,24 @@
         // Registrar usuário
         async function registerUser() {
             const userId = userIdInputEl.value.trim();
-            
+
             if (!userId) {
                 alert('Por favor, digite um ID de usuário');
                 return;
             }
-            
+
             if (userId.length < 3) {
                 alert('O ID deve ter pelo menos 3 caracteres');
                 return;
             }
-            
+
             currentUserId = userId;
             currentUserIdEl.textContent = userId;
-            
+
             // Esconder setup e mostrar interface principal
             userSetupEl.classList.add('hidden');
             mainInterfaceEl.classList.remove('hidden');
-            
+
             // Inicializar conexão
             await initializeConnection();
         }
@@ -273,18 +307,21 @@
             if (isStreaming) {
                 stopStream();
             }
-            
+
+            // Parar heartbeat
+            stopHeartbeat();
+
             if (connection.state === 'Connected') {
                 connection.stop();
             }
-            
+
             currentUserId = null;
             userIdInputEl.value = '';
-            
+
             // Mostrar setup e esconder interface principal
             userSetupEl.classList.remove('hidden');
             mainInterfaceEl.classList.add('hidden');
-            
+
             updateStatus('disconnected', 'Desconectado');
         }
 
@@ -294,15 +331,19 @@
                 await connection.start();
                 updateStatus('connected', 'Conectado ao servidor');
                 console.log('✅ Conectado ao SignalR Hub');
-                
+
                 // Registrar usuário no servidor
                 await connection.invoke('RegisterUser', currentUserId);
                 console.log(`👤 Usuário registrado: ${currentUserId}`);
-                
+
+                // Iniciar heartbeat para manter conexão ativa
+                startHeartbeat();
+
                 loadRecordings();
             } catch (error) {
                 updateStatus('disconnected', 'Erro de conexão');
                 console.error('❌ Erro ao conectar:', error);
+                stopHeartbeat();
                 setTimeout(initializeConnection, 5000);
             }
         }
@@ -312,7 +353,7 @@
             statusEl.className = `status ${type}`;
             statusEl.textContent = message;
             isConnected = type === 'connected';
-            
+
             if (type === 'connected') {
                 startBtn.disabled = false;
             } else {
@@ -322,29 +363,32 @@
         }
 
         // Event listeners do SignalR
-        connection.on('ReceiveAnswer', async (answer) => {
-            console.log('📨 Recebendo answer');
+        connection.on('ReceiveAnswer', async (senderId, answer) => {
+            console.log('📨 Recebendo answer de:', senderId);
             if (peerConnection) {
                 await peerConnection.setRemoteDescription(answer);
             }
         });
 
-        connection.on('ReceiveIceCandidate', async (candidate) => {
-            console.log('📨 Recebendo ICE candidate');
+        connection.on('ReceiveIceCandidate', async (senderId, candidate) => {
+            console.log('📨 Recebendo ICE candidate de:', senderId);
             if (peerConnection) {
                 await peerConnection.addIceCandidate(candidate);
             }
         });
-        
+
         connection.on('StreamRequested', async (viewerConnectionId) => {
             console.log('📺 Stream solicitado por viewer:', viewerConnectionId);
+            // Armazenar o connectionId do viewer atual
+            currentViewerConnectionId = viewerConnectionId;
+            
             if (isStreaming && peerConnection && localStream) {
                 try {
                     // Criar oferta usando a conexão principal
                     const offer = await peerConnection.createOffer();
                     await peerConnection.setLocalDescription(offer);
-                    await connection.invoke('SendOffer', offer);
-                    
+                    await connection.invoke('SendOfferToConnection', viewerConnectionId, offer);
+
                     console.log('✅ Oferta enviada para viewer:', viewerConnectionId);
                 } catch (error) {
                     console.error('❌ Erro ao criar oferta para viewer:', error);
@@ -360,69 +404,105 @@
             updateStatus('connected', 'Reconectado');
             if (currentUserId) {
                 await connection.invoke('RegisterUser', currentUserId);
+                
+                // Reiniciar heartbeat
+                startHeartbeat();
             }
             loadRecordings();
         });
 
         connection.onclose(() => {
             updateStatus('disconnected', 'Conexão perdida');
+            stopHeartbeat();
         });
+
+        // Event listeners para heartbeat
+        connection.on('Pong', (timestamp) => {
+            console.log('🏓 Pong recebido:', timestamp);
+        });
+
+        connection.on('KeepAliveResponse', (response) => {
+            console.log('💓 KeepAlive response:', response);
+        });
+
+        // Funções de heartbeat
+        function startHeartbeat() {
+            console.log('💓 Iniciando heartbeat...');
+            heartbeatInterval = setInterval(async () => {
+                if (connection.state === 'Connected') {
+                    try {
+                        await connection.invoke('KeepAlive');
+                        console.log('💓 KeepAlive enviado');
+                    } catch (error) {
+                        console.error('❌ Erro ao enviar KeepAlive:', error);
+                    }
+                }
+            }, 20000); // A cada 20 segundos
+        }
+
+        function stopHeartbeat() {
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+                console.log('💓 Heartbeat parado');
+            }
+        }
 
         // Iniciar stream
         async function startStream() {
             if (isStreaming || !isConnected || !currentUserId) return;
-            
+
             try {
                 console.log('🎬 Iniciando compartilhamento de tela...');
                 updateStatus('streaming', 'Iniciando compartilhamento de tela...');
-                
+
                 // Obter compartilhamento de tela
-                localStream = await navigator.mediaDevices.getDisplayMedia({ 
-                    video: { width: 1280, height: 720 }, 
-                    audio: true 
+                localStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { width: 1280, height: 720 },
+                    audio: true
                 });
                 localVideo.srcObject = localStream;
-                
+
                 // Criar conexão WebRTC
                 peerConnection = new RTCPeerConnection(rtcConfig);
-                
+
                 // Adicionar tracks locais
                 localStream.getTracks().forEach(track => {
                     peerConnection.addTrack(track, localStream);
                 });
-                
+
                 // Configurar event handlers
                 peerConnection.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        console.log('📤 Enviando ICE candidate');
-                        connection.invoke('SendIceCandidate', event.candidate);
+                    if (event.candidate && currentViewerConnectionId) {
+                        console.log('📤 Enviando ICE candidate para viewer:', currentViewerConnectionId);
+                        connection.invoke('SendIceCandidate', currentViewerConnectionId, event.candidate);
                     }
                 };
-                
+
                 peerConnection.onconnectionstatechange = () => {
                     console.log('🔗 Estado da conexão:', peerConnection.connectionState);
                     if (peerConnection.connectionState === 'connected') {
                         updateStatus('streaming', `🖥️ ${currentUserId} compartilhando tela ao vivo`);
                     }
                 };
-                
+
                 // Detectar quando o usuário para o compartilhamento pela interface do navegador
                 localStream.getVideoTracks()[0].addEventListener('ended', () => {
                     console.log('🛑 Compartilhamento parado pelo usuário');
                     stopStream();
                 });
-                
+
                 // Criar e enviar offer automaticamente para iniciar o compartilhamento
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 await connection.invoke('SendOffer', offer);
-                
+
                 isStreaming = true;
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
-                
+
                 console.log('✅ Stream iniciado com sucesso');
-                
+
             } catch (error) {
                 console.error('❌ Erro ao iniciar stream:', error);
                 updateStatus('connected', 'Erro ao iniciar stream');
@@ -433,10 +513,10 @@
         // Parar stream
         async function stopStream() {
             if (!isStreaming) return;
-            
+
             try {
                 console.log('⏹️ Parando stream...');
-                
+
                 // Parar tracks locais
                 if (localStream) {
                     localStream.getTracks().forEach(track => {
@@ -445,28 +525,28 @@
                     });
                     localVideo.srcObject = null;
                 }
-                
+
                 // Fechar conexão WebRTC
                 if (peerConnection) {
                     peerConnection.close();
                     peerConnection = null;
                 }
-                
+
                 // Notificar servidor
                 if (isConnected) {
                     await connection.invoke('StopStream');
                 }
-                
+
                 isStreaming = false;
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-                
+
                 updateStatus('connected', 'Compartilhamento parado');
                 console.log('✅ Stream parado com sucesso');
-                
+
                 // Atualizar lista de gravações
                 setTimeout(loadRecordings, 1000);
-                
+
             } catch (error) {
                 console.error('❌ Erro ao parar stream:', error);
             }
@@ -475,34 +555,44 @@
         // Carregar gravações do usuário atual
         async function loadRecordings() {
             if (!currentUserId) return;
-            
+
             try {
                 const response = await fetch('http://localhost:5000/api/recordings');
-                const allRecordings = await response.json();
-                
+                const data = await response.json();
+
+                // Verificar se existe a propriedade recordings e se é um array
+                const allRecordings = data.recordings || [];
+
+                if (!Array.isArray(allRecordings)) {
+                    recordingsEl.innerHTML = '<p>Erro: formato de dados inválido</p>';
+                    return;
+                }
+
                 // Filtrar gravações do usuário atual
-                const userRecordings = allRecordings.filter(recording => 
-                    recording.includes(`recording_${currentUserId}_`)
-                );
-                
+                const userRecordings = allRecordings.filter(recording => {
+                    const fileName = recording.fileName || recording.toString();
+                    return fileName.includes(`recording_${currentUserId}_`);
+                });
+
                 recordingsEl.innerHTML = '';
-                
+
                 if (userRecordings.length === 0) {
                     recordingsEl.innerHTML = '<p>Nenhuma gravação sua disponível</p>';
                     return;
                 }
-                
+
                 userRecordings.forEach(recording => {
                     const button = document.createElement('button');
-                    button.textContent = `▶️ ${recording}`;
+                    const displayName = recording.fileName || recording.toString();
+                    button.textContent = `▶️ ${displayName}`;
                     button.className = 'recording-item';
-                    button.onclick = () => playRecording(recording);
+                    button.onclick = () => playRecording(recording.fileName || recording);
                     recordingsEl.appendChild(button);
                 });
-                
+
             } catch (error) {
                 console.error('❌ Erro ao carregar gravações:', error);
-                recordingsEl.innerHTML = '<p>Erro ao carregar gravações</p>';
+                recordingsEl.innerHTML = `<p>Erro ao carregar gravações: ${error.message}</p>`;
             }
         }
 
@@ -540,4 +630,5 @@
         });
     </script>
 </body>
+
 </html>
